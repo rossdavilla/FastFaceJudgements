@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rapid Face Attractiveness Test</title>
+<style>
+  :root {
+    --bg1: #0f0c29;
+    --bg2: #302b63;
+    --bg3: #24243e;
+    --accent: #ff4d8d;
+    --accent2: #7b5cff;
+    --good: #2ecc71;
+    --bad: #e74c3c;
+    --text: #f5f5ff;
+    --muted: #b8b5d1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    background: linear-gradient(-45deg, var(--bg1), var(--bg2), var(--bg3), var(--bg1));
+    background-size: 400% 400%;
+    animation: gradientShift 18s ease infinite;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-x: hidden;
+    padding: 20px;
+  }
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  #confetti-canvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+  }
+  .screen {
+    display: none;
+    width: 100%;
+    max-width: 900px;
+    text-align: center;
+    animation: fadeIn 0.4s ease;
+  }
+  .screen.active { display: block; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  h1 {
+    font-size: clamp(2rem, 6vw, 3.4rem);
+    line-height: 1.1;
+    margin-bottom: 18px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  p.lead { font-size: 1.15rem; color: var(--muted); line-height: 1.6; margin-bottom: 14px; }
+
+  .btn {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 16px 40px;
+    cursor: pointer;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    box-shadow: 0 8px 24px rgba(123,92,255,0.45);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    margin: 8px;
+  }
+  .btn:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 12px 30px rgba(255,77,141,0.5); }
+  .btn:active { transform: translateY(0) scale(0.98); }
+  .btn.secondary { background: rgba(255,255,255,0.12); box-shadow: none; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .info-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px;
+    padding: 26px 30px;
+    margin: 22px 0;
+    text-align: left;
+  }
+  .info-card ol { margin: 10px 0 0 20px; color: var(--muted); line-height: 1.9; }
+  .info-card strong { color: var(--text); }
+
+  /* Stage for rapid display */
+  .stage-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+  #stage {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+    background: #000;
+  }
+  #stage img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    display: none;
+  }
+  #stage img.mask { object-fit: cover; }
+  #stage img.show { display: block; }
+
+  .progress-bar {
+    width: 100%;
+    max-width: 500px;
+    height: 8px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 0 auto;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .pair-label { font-size: 1rem; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .speed-badge {
+    display: inline-block;
+    background: rgba(255,77,141,0.18);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 30px;
+    padding: 4px 16px;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  /* Countdown */
+  #countdown {
+    font-size: clamp(4rem, 18vw, 9rem);
+    font-weight: 800;
+    color: var(--text);
+    animation: popPulse 0.6s ease;
+  }
+  @keyframes popPulse {
+    0% { transform: scale(0.3); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+
+  /* Question buttons */
+  .choice-row { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin: 26px 0; }
+  .choice-btn {
+    font-size: 1.4rem;
+    font-weight: 800;
+    padding: 30px 46px;
+    border-radius: 20px;
+    border: 3px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    min-width: 180px;
+  }
+  .choice-btn:hover { border-color: var(--accent); transform: translateY(-4px); }
+  .choice-btn.selected {
+    border-color: var(--accent);
+    background: linear-gradient(90deg, rgba(255,77,141,0.25), rgba(123,92,255,0.25));
+    box-shadow: 0 8px 24px rgba(255,77,141,0.35);
+  }
+
+  /* Reveal */
+  .reveal-row { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin: 24px 0; }
+  .reveal-card {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 4px solid transparent;
+    background: rgba(255,255,255,0.05);
+    transition: all 0.3s ease;
+    position: relative;
+    max-width: 320px;
+  }
+  .reveal-card img { width: 100%; height: auto; display: block; max-height: 46vh; object-fit: contain; }
+  .reveal-card .cap { padding: 10px; font-weight: 700; font-size: 1.05rem; }
+  .reveal-card.correct { border-color: var(--good); box-shadow: 0 0 30px rgba(46,204,113,0.5); }
+  .reveal-card.correct .cap { color: var(--good); }
+  .reveal-card .crown {
+    position: absolute; top: 10px; right: 10px;
+    background: var(--good); color: #fff;
+    border-radius: 30px; padding: 4px 12px; font-size: 0.85rem; font-weight: 800;
+  }
+  .verdict { font-size: 1.8rem; font-weight: 800; margin: 10px 0; }
+  .verdict.win { color: var(--good); }
+  .verdict.lose { color: var(--bad); }
+
+  /* Results table */
+  .result-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+  .result-table th, .result-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: center; }
+  .result-table th { color: var(--muted); font-size: 0.9rem; text-transform: uppercase; }
+  .result-table .yes { color: var(--good); font-weight: 800; }
+  .result-table .no { color: var(--bad); font-weight: 800; }
+  .big-score { font-size: clamp(3rem, 12vw, 5rem); font-weight: 800;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+
+  .loading-bar-wrap { max-width: 400px; margin: 24px auto 0; }
+</style>
+</head>
+<body>
+<canvas id="confetti-canvas"></canvas>
+
+<!-- START SCREEN -->
+<section id="screen-start" class="screen active">
+  <h1>⚡ Snap Judgment</h1>
+  <p class="lead">How fast can your brain decide who's more attractive?</p>
+  <div class="info-card">
+    <p class="lead" style="margin:0 0 6px; color:var(--text); font-weight:700;">How it works</p>
+    <ol>
+      <li>You'll see <strong>Face&nbsp;1</strong>, then a burst of <strong>static</strong>, then <strong>Face&nbsp;2</strong>, then static again.</li>
+      <li>Then you pick which face was <strong>more attractive</strong>.</li>
+      <li>Each round the faces flash by <strong>faster and faster</strong> — starting at 1&nbsp;full second and ending at just <strong>0.06&nbsp;seconds</strong>!</li>
+      <li>Get it right and enjoy a little 🎉.</li>
+    </ol>
+  </div>
+  <p class="lead" id="loading-text">Loading all images… <span id="load-pct" style="color:var(--accent); font-weight:800;">0%</span></p>
+  <div class="loading-bar-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="load-fill"></div></div>
+  </div>
+  <button class="btn" id="start-btn" disabled>Preparing…</button>
+</section>
+
+<!-- PLAY SCREEN -->
+<section id="screen-play" class="screen">
+  <div class="stage-wrap">
+    <div class="pair-label" id="play-label">Round 1 of 7</div>
+    <div id="stage">
+      <img id="face-1" alt="">
+      <img id="face-2" alt="">
+      <img id="mask-img" class="mask" alt="">
+      <div id="countdown" style="display:none;"></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="play-progress"></div></div>
+    <div class="speed-badge" id="speed-badge">Face time: 1.00s</div>
+  </div>
+</section>
+
+<!-- QUESTION SCREEN -->
+<section id="screen-question" class="screen">
+  <div class="pair-label" id="q-label">Round 1 of 7</div>
+  <h1 style="font-size:clamp(1.6rem,5vw,2.6rem);">Which face was more attractive?</h1>
+  <div class="choice-row">
+    <button class="choice-btn" data-choice="1">Face&nbsp;1</button>
+    <button class="choice-btn" data-choice="2">Face&nbsp;2</button>
+  </div>
+  <button class="btn" id="submit-btn" disabled>Submit Answer</button>
+</section>
+
+<!-- REVEAL SCREEN -->
+<section id="screen-reveal" class="screen">
+  <div class="verdict" id="verdict-text">Correct!</div>
+  <div class="reveal-row">
+    <div class="reveal-card" id="reveal-1">
+      <img id="reveal-img-1" alt="Face 1">
+      <div class="cap">Face 1</div>
+    </div>
+    <div class="reveal-card" id="reveal-2">
+      <img id="reveal-img-2" alt="Face 2">
+      <div class="cap">Face 2</div>
+    </div>
+  </div>
+  <p class="lead" id="reveal-detail"></p>
+  <button class="btn" id="next-btn">Next Round →</button>
+</section>
+
+<!-- RESULTS SCREEN -->
+<section id="screen-results" class="screen">
+  <h1>🏁 Results</h1>
+  <div class="big-score" id="final-score">0 / 7</div>
+  <p class="lead" id="score-message"></p>
+  <table class="result-table" id="result-table">
+    <thead><tr><th>Round</th><th>Face Time</th><th>Your Pick</th><th>Correct</th><th>Result</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <button class="btn" id="replay-btn">Play Again 🔁</button>
+</section>
+
+<script>
+// ---------- Data ----------
+// The 7 face pairs. `correct` = which face (1 or 2) is the more attractive one.
+const PAIRS = [
+  { w:253, h:379, f1:'pair1-1.jpg',                       f2:'pair1-2 (more attractive).png', correct:2 },
+  { w:686, h:498, f1:'pair2-1.png',                       f2:'pair2-2 (more attractive).png', correct:2 },
+  { w:516, h:774, f1:'pair3-1 (more attractive).png',     f2:'pair3-2.png',                   correct:1 },
+  { w:706, h:952, f1:'pair4-1.png',                       f2:'pair4-2 (more attractive).png', correct:2 },
+  { w:240, h:227, f1:'pair5-1 (more attractive).png',     f2:'pair5-2.png',                   correct:1 },
+  { w:456, h:494, f1:'pair6-1.png',                       f2:'pair6-2 (more attractive).png', correct:2 },
+  { w:227, h:226, f1:'pair7-1 (more attractive).png',     f2:'pair7-2.png',                   correct:1 },
+];
+// Face display time per ROUND (round position, not tied to a specific pair).
+const DURATIONS = [1000, 750, 500, 250, 150, 100, 60];
+const MASK_MS = 1000;
+const MASK_SRC = 'img/' + encodeURIComponent('static.jpg');
+const url = (f) => 'img/' + encodeURIComponent(f);
+
+// Fisher-Yates shuffle (returns a new array).
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ---------- State ----------
+let current = 0;
+let selected = null;
+let order = [];          // shuffled copy of PAIRS for this play-through
+const results = [];
+
+function startGame() {
+  current = 0;
+  selected = null;
+  results.length = 0;
+  order = shuffle(PAIRS);   // randomize pair presentation order each game
+  playRound();
+}
+
+// ---------- Elements ----------
+const $ = (id) => document.getElementById(id);
+const screens = {
+  start:    $('screen-start'),
+  play:     $('screen-play'),
+  question: $('screen-question'),
+  reveal:   $('screen-reveal'),
+  results:  $('screen-results'),
+};
+function showScreen(name) {
+  Object.values(screens).forEach(s => s.classList.remove('active'));
+  screens[name].classList.add('active');
+}
+
+// ---------- Preload ----------
+// Loads (and holds a reference to) every face + the mask up front, so once
+// the game starts there is zero network/decode lag between flashes.
+const preloaded = [];
+function preloadAll() {
+  const files = [MASK_SRC];
+  PAIRS.forEach(p => { files.push(url(p.f1)); files.push(url(p.f2)); });
+  let loaded = 0;
+  const fill = $('load-fill');
+  const pct = $('load-pct');
+  return Promise.all(files.map(src => new Promise(res => {
+    const img = new Image();
+    const done = () => {
+      loaded++;
+      const percent = Math.round(loaded / files.length * 100);
+      fill.style.width = percent + '%';
+      if (pct) pct.textContent = percent + '%';
+      res();
+    };
+    img.onload = done; img.onerror = done;
+    img.src = src;
+    preloaded.push(img);   // keep a reference so images stay in cache
+  })));
+}
+
+// ---------- Timing helper (precise, rAF-based) ----------
+function preciseDelay(ms) {
+  return new Promise(res => {
+    const start = performance.now();
+    (function tick(now) {
+      if (now - start >= ms) res();
+      else requestAnimationFrame(tick);
+    })(performance.now());
+  });
+}
+
+// ---------- Stage sizing ----------
+function sizeStage(p) {
+  const maxW = Math.min(window.innerWidth * 0.9, 720);
+  const maxH = window.innerHeight * 0.62;
+  const scale = Math.min(maxW / p.w, maxH / p.h, 1.8);
+  const stage = $('stage');
+  stage.style.width = Math.round(p.w * scale) + 'px';
+  stage.style.height = Math.round(p.h * scale) + 'px';
+}
+
+// ---------- Play sequence ----------
+async function playRound() {
+  showScreen('play');
+  const p = order[current];
+  const ms = DURATIONS[current];
+  sizeStage(p);
+  $('play-label').textContent = `Round ${current + 1} of ${order.length}`;
+  $('q-label').textContent = `Round ${current + 1} of ${order.length}`;
+  $('play-progress').style.width = (current / order.length * 100) + '%';
+  $('speed-badge').textContent = `Face time: ${(ms / 1000).toFixed(2)}s`;
+
+  const face1El = $('face-1');
+  const face2El = $('face-2');
+  const maskEl = $('mask-img');
+  const cdEl = $('countdown');
+  face1El.classList.remove('show');
+  face2El.classList.remove('show');
+  maskEl.classList.remove('show');
+
+  // Set BOTH face sources + mask now, and decode them up front so no
+  // src-swap happens during the timed flashes (which would show a stale frame).
+  face1El.src = url(p.f1);
+  face2El.src = url(p.f2);
+  maskEl.src = MASK_SRC;
+  await Promise.all([face1El, face2El, maskEl].map(img =>
+    img.decode ? img.decode().catch(() => {}) : Promise.resolve()
+  ));
+
+  // Countdown 3-2-1
+  cdEl.style.display = 'flex';
+  cdEl.style.alignItems = 'center';
+  cdEl.style.justifyContent = 'center';
+  cdEl.style.width = '100%';
+  cdEl.style.height = '100%';
+  for (const n of ['3', '2', '1']) {
+    cdEl.textContent = n;
+    cdEl.style.animation = 'none';
+    void cdEl.offsetWidth;
+    cdEl.style.animation = 'popPulse 0.6s ease';
+    await preciseDelay(700);
+  }
+  cdEl.style.display = 'none';
+
+  // Face 1 (already decoded — just toggle visibility)
+  face1El.classList.add('show');
+  await preciseDelay(ms);
+  face1El.classList.remove('show');
+
+  // Mask
+  maskEl.classList.add('show');
+  await preciseDelay(MASK_MS);
+  maskEl.classList.remove('show');
+
+  // Face 2 (already decoded — just toggle visibility)
+  face2El.classList.add('show');
+  await preciseDelay(ms);
+  face2El.classList.remove('show');
+
+  // Mask
+  maskEl.classList.add('show');
+  await preciseDelay(MASK_MS);
+  maskEl.classList.remove('show');
+
+  askQuestion();
+}
+
+// ---------- Question ----------
+function askQuestion() {
+  selected = null;
+  document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+  $('submit-btn').disabled = true;
+  showScreen('question');
+}
+document.querySelectorAll('.choice-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selected = parseInt(btn.dataset.choice, 10);
+    document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    $('submit-btn').disabled = false;
+  });
+});
+$('submit-btn').addEventListener('click', () => {
+  if (!selected) return;
+  reveal();
+});
+
+// ---------- Reveal ----------
+function reveal() {
+  const p = order[current];
+  const ms = DURATIONS[current];
+  const correct = selected === p.correct;
+  results.push({ round: current + 1, ms, pick: selected, correct: p.correct, right: correct });
+
+  $('reveal-img-1').src = url(p.f1);
+  $('reveal-img-2').src = url(p.f2);
+
+  const c1 = $('reveal-1'), c2 = $('reveal-2');
+  c1.classList.remove('correct'); c2.classList.remove('correct');
+  c1.querySelector('.crown')?.remove();
+  c2.querySelector('.crown')?.remove();
+  const winCard = p.correct === 1 ? c1 : c2;
+  winCard.classList.add('correct');
+  const crown = document.createElement('div');
+  crown.className = 'crown';
+  crown.textContent = '👑 More attractive';
+  winCard.appendChild(crown);
+
+  const v = $('verdict-text');
+  if (correct) {
+    v.textContent = '🎉 Correct!';
+    v.className = 'verdict win';
+    $('reveal-detail').textContent = `You picked Face ${selected} — and Face ${p.correct} was rated more attractive. Nice call at ${(ms/1000).toFixed(2)}s!`;
+    burstConfetti();
+  } else {
+    v.textContent = '❌ Not quite';
+    v.className = 'verdict lose';
+    $('reveal-detail').textContent = `You picked Face ${selected}, but Face ${p.correct} was rated more attractive.`;
+  }
+  $('next-btn').textContent = current + 1 < PAIRS.length ? 'Next Round →' : 'See Results 🏁';
+  showScreen('reveal');
+}
+$('next-btn').addEventListener('click', () => {
+  current++;
+  if (current < PAIRS.length) playRound();
+  else showResults();
+});
+
+// ---------- Results ----------
+function showResults() {
+  const score = results.filter(r => r.right).length;
+  $('final-score').textContent = `${score} / ${PAIRS.length}`;
+  const msgs = {
+    7: "Perfect score! You've got an eye for it. 👁️✨",
+    6: "Incredible — almost flawless!",
+    5: "Great instincts under pressure!",
+    4: "Solid — better than a coin flip!",
+    3: "Not bad for split-second decisions!",
+    2: "Those faces flew by fast, didn't they?",
+    1: "Speed got the better of you this time!",
+    0: "Snap judgments are hard! Try again?",
+  };
+  $('score-message').textContent = msgs[score] || '';
+  const tbody = $('result-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  results.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.round}</td><td>${(r.ms/1000).toFixed(2)}s</td>` +
+      `<td>Face ${r.pick}</td><td>Face ${r.correct}</td>` +
+      `<td class="${r.right ? 'yes' : 'no'}">${r.right ? '✓' : '✗'}</td>`;
+    tbody.appendChild(tr);
+  });
+  showScreen('results');
+  if (score >= 5) setTimeout(burstConfetti, 300);
+  if (score === 7) setTimeout(burstConfetti, 800);
+}
+$('replay-btn').addEventListener('click', startGame);
+
+// ---------- Start ----------
+$('start-btn').addEventListener('click', startGame);
+
+// ---------- Confetti ----------
+const canvas = $('confetti-canvas');
+const ctx = canvas.getContext('2d');
+let confetti = [];
+let confettiRunning = false;
+function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const CONFETTI_MS = 1000;   // the whole burst lasts exactly 1 second
+function burstConfetti() {
+  const colors = ['#ff4d8d', '#7b5cff', '#2ecc71', '#ffd54f', '#4dd0e1', '#ff8a65'];
+  const born = performance.now();
+  for (let i = 0; i < 160; i++) {
+    confetti.push({
+      x: window.innerWidth / 2 + (Math.random() - 0.5) * 200,
+      y: window.innerHeight / 2,
+      vx: (Math.random() - 0.5) * 16,
+      vy: Math.random() * -16 - 4,
+      size: Math.random() * 8 + 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      vrot: (Math.random() - 0.5) * 20,
+      born,
+    });
+  }
+  if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(animateConfetti); }
+}
+function animateConfetti(now) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  confetti.forEach(p => {
+    p.vy += 0.35;         // gravity
+    p.vx *= 0.99;
+    p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+    const age = now - p.born;
+    p.life = 1 - age / CONFETTI_MS;      // fade out over the 1s lifetime
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot * Math.PI / 180);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+    ctx.restore();
+  });
+  confetti = confetti.filter(p => now - p.born < CONFETTI_MS);   // gone after 1s
+  if (confetti.length > 0) requestAnimationFrame(animateConfetti);
+  else { confettiRunning = false; ctx.clearRect(0, 0, canvas.width, canvas.height); }
+}
+
+// ---------- Init ----------
+preloadAll().then(() => {
+  $('loading-text').textContent = 'Ready to test your instincts?';
+  $('load-fill').style.width = '100%';
+  const btn = $('start-btn');
+  btn.disabled = false;
+  btn.textContent = 'Start the Test ▶';
+});
+</script>
+</body>
+</html>
