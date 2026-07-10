@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snap Judgment — Embed</title>
+<style>
+  :root {
+    --bg1: #0f0c29;
+    --bg2: #302b63;
+    --bg3: #24243e;
+    --accent: #ff4d8d;
+    --accent2: #7b5cff;
+    --good: #2ecc71;
+    --bad: #e74c3c;
+    --text: #f5f5ff;
+    --muted: #b8b5d1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    background: linear-gradient(-45deg, var(--bg1), var(--bg2), var(--bg3), var(--bg1));
+    background-size: 400% 400%;
+    animation: gradientShift 18s ease infinite;
+  }
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* The frame fills the entire iframe viewport. Nothing ever overflows it. */
+  #frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  #confetti-canvas { position: absolute; inset: 0; pointer-events: none; z-index: 9999; }
+
+  /* Every screen fills the frame and centers its content. */
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2.5%;
+    gap: 1.4vmin;
+  }
+  .screen.active { display: flex; animation: fadeIn 0.35s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  h1 {
+    font-size: clamp(1.1rem, 5.2vmin, 2.2rem);
+    line-height: 1.1;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .lead { font-size: clamp(0.72rem, 2.5vmin, 1rem); color: var(--muted); line-height: 1.45; }
+
+  .btn {
+    font-size: clamp(0.75rem, 2.6vmin, 1.05rem);
+    font-weight: 700; color: #fff; border: none; border-radius: 50px;
+    padding: 1.4vmin 4vmin; cursor: pointer;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    box-shadow: 0 6px 18px rgba(123,92,255,0.45);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-2px) scale(1.03); }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ---- Start screen ---- */
+  .info-card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 1.8vmin 2.6vmin;
+    text-align: left;
+    max-width: 92%;
+  }
+  .info-card ol { margin: 0.4vmin 0 0 3vmin; color: var(--muted); line-height: 1.5;
+    font-size: clamp(0.66rem, 2.2vmin, 0.92rem); }
+  .info-card strong { color: var(--text); }
+
+  /* ---- Play screen ---- */
+  .stage-wrap { width: 100%; height: 100%; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 1.4vmin; }
+  .pair-label { font-size: clamp(0.6rem, 2vmin, 0.85rem); color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase; flex: none; }
+  #stage-area { flex: 1 1 auto; min-height: 0; width: 100%;
+    display: flex; align-items: center; justify-content: center; }
+  #stage {
+    position: relative; border-radius: 10px; overflow: hidden;
+    box-shadow: 0 14px 40px rgba(0,0,0,0.55); background: #000;
+  }
+  #stage img { position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; display: none; background: #000; }
+  #stage img.mask { object-fit: cover; }
+  #stage img.show { display: block; }
+  #countdown { font-size: clamp(2.5rem, 14vmin, 7rem); font-weight: 800; color: var(--text); }
+  #countdown.pulse { animation: popPulse 0.6s ease; }
+  @keyframes popPulse {
+    0% { transform: scale(0.3); opacity: 0; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+  .play-foot { flex: none; width: 100%; display: flex; flex-direction: column;
+    align-items: center; gap: 1vmin; }
+  .progress-bar { width: min(60%, 420px); height: 6px; background: rgba(255,255,255,0.12);
+    border-radius: 10px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.4s ease; }
+  .speed-badge { background: rgba(255,77,141,0.18); border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 30px; padding: 0.4vmin 2.2vmin;
+    font-weight: 700; font-size: clamp(0.6rem, 2vmin, 0.85rem); }
+
+  /* ---- Question screen ---- */
+  .choice-row { display: flex; gap: 3vmin; justify-content: center; flex-wrap: wrap; }
+  .choice-btn {
+    font-size: clamp(0.9rem, 3.4vmin, 1.4rem); font-weight: 800;
+    padding: 2.4vmin 4.5vmin; border-radius: 16px;
+    border: 3px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06);
+    color: var(--text); cursor: pointer; transition: all 0.15s ease; min-width: 24vmin;
+  }
+  .choice-btn:hover { border-color: var(--accent); transform: translateY(-3px); }
+  .choice-btn.selected {
+    border-color: var(--accent);
+    background: linear-gradient(90deg, rgba(255,77,141,0.25), rgba(123,92,255,0.25));
+  }
+
+  /* ---- Reveal screen ---- */
+  .reveal-row { display: flex; gap: 2.4vmin; justify-content: center; align-items: center;
+    flex: 1 1 auto; min-height: 0; width: 100%; }
+  .reveal-card {
+    display: flex; flex-direction: column; align-items: center;
+    border-radius: 12px; overflow: hidden; border: 3px solid transparent;
+    background: rgba(255,255,255,0.05); position: relative; max-width: 44%; height: 100%;
+    justify-content: center;
+  }
+  .reveal-card img { max-width: 100%; max-height: 82%; width: auto; height: auto;
+    object-fit: contain; display: block; border-radius: 8px; }
+  .reveal-card .cap { padding: 0.6vmin; font-weight: 700; font-size: clamp(0.66rem, 2.2vmin, 0.95rem); }
+  .reveal-card.correct { border-color: var(--good); box-shadow: 0 0 22px rgba(46,204,113,0.5); }
+  .reveal-card.correct .cap { color: var(--good); }
+  .reveal-card .crown { position: absolute; top: 1vmin; right: 1vmin; background: var(--good);
+    color: #fff; border-radius: 30px; padding: 0.4vmin 1.4vmin;
+    font-size: clamp(0.55rem, 1.9vmin, 0.8rem); font-weight: 800; }
+  .verdict { font-size: clamp(1rem, 4vmin, 1.7rem); font-weight: 800; flex: none; }
+  .verdict.win { color: var(--good); }
+  .verdict.lose { color: var(--bad); }
+  #reveal-detail { flex: none; max-width: 92%; }
+
+  /* ---- Results screen ---- */
+  .big-score { font-size: clamp(2rem, 9vmin, 4rem); font-weight: 800;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .pips { display: flex; gap: 1.2vmin; justify-content: center; flex-wrap: wrap; }
+  .pip { display: flex; flex-direction: column; align-items: center; gap: 0.3vmin;
+    background: rgba(255,255,255,0.06); border-radius: 10px; padding: 0.8vmin 1.2vmin;
+    min-width: 8vmin; }
+  .pip .r { font-size: clamp(0.5rem, 1.7vmin, 0.72rem); color: var(--muted); }
+  .pip .m { font-size: clamp(0.5rem, 1.6vmin, 0.7rem); color: var(--muted); }
+  .pip .mark { font-size: clamp(0.9rem, 3vmin, 1.3rem); font-weight: 800; }
+  .pip.yes .mark { color: var(--good); }
+  .pip.no .mark { color: var(--bad); }
+
+  .loading-bar-wrap { width: min(70%, 420px); }
+</style>
+</head>
+<body>
+<div id="frame">
+<canvas id="confetti-canvas"></canvas>
+
+<!-- START -->
+<section id="screen-start" class="screen active">
+  <h1>⚡ Snap Judgment</h1>
+  <p class="lead">How fast can your brain decide who's more attractive?</p>
+  <div class="info-card">
+    <ol>
+      <li><strong>Face&nbsp;1</strong> → static → <strong>Face&nbsp;2</strong> → static, then you pick the <strong>more attractive</strong> one.</li>
+      <li>Each round flashes <strong>faster</strong> — from 1&nbsp;second down to <strong>0.06&nbsp;seconds</strong>.</li>
+      <li>Guess right for a little 🎉.</li>
+    </ol>
+  </div>
+  <p class="lead" id="loading-text">Loading all images… <span id="load-pct" style="color:var(--accent);font-weight:800;">0%</span></p>
+  <div class="loading-bar-wrap"><div class="progress-bar"><div class="progress-fill" id="load-fill"></div></div></div>
+  <button class="btn" id="start-btn" disabled>Preparing…</button>
+</section>
+
+<!-- PLAY -->
+<section id="screen-play" class="screen">
+  <div class="stage-wrap">
+    <div class="pair-label" id="play-label">Round 1 of 7</div>
+    <div id="stage-area">
+      <div id="stage">
+        <img id="face-1" alt="">
+        <img id="face-2" alt="">
+        <img id="mask-img" class="mask" alt="">
+        <div id="countdown" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="play-foot">
+      <div class="progress-bar"><div class="progress-fill" id="play-progress"></div></div>
+      <div class="speed-badge" id="speed-badge">Face time: 1.00s</div>
+    </div>
+  </div>
+</section>
+
+<!-- QUESTION -->
+<section id="screen-question" class="screen">
+  <div class="pair-label" id="q-label">Round 1 of 7</div>
+  <h1>Which face was more attractive?</h1>
+  <div class="choice-row">
+    <button class="choice-btn" data-choice="1">Face&nbsp;1</button>
+    <button class="choice-btn" data-choice="2">Face&nbsp;2</button>
+  </div>
+  <button class="btn" id="submit-btn" disabled>Submit Answer</button>
+</section>
+
+<!-- REVEAL -->
+<section id="screen-reveal" class="screen">
+  <div class="verdict" id="verdict-text">Correct!</div>
+  <div class="reveal-row">
+    <div class="reveal-card" id="reveal-1"><img id="reveal-img-1" alt="Face 1"><div class="cap">Face 1</div></div>
+    <div class="reveal-card" id="reveal-2"><img id="reveal-img-2" alt="Face 2"><div class="cap">Face 2</div></div>
+  </div>
+  <p class="lead" id="reveal-detail"></p>
+  <button class="btn" id="next-btn">Next Round →</button>
+</section>
+
+<!-- RESULTS -->
+<section id="screen-results" class="screen">
+  <h1>🏁 Results</h1>
+  <div class="big-score" id="final-score">0 / 7</div>
+  <p class="lead" id="score-message"></p>
+  <div class="pips" id="pips"></div>
+  <button class="btn" id="replay-btn">Play Again 🔁</button>
+</section>
+
+</div>
+
+<script>
+// ---------- Data ----------
+const PAIRS = [
+  { w:253, h:379, f1:'pair1-1.jpg',                   f2:'pair1-2 (more attractive).png', correct:2 },
+  { w:686, h:498, f1:'pair2-1.png',                   f2:'pair2-2 (more attractive).png', correct:2 },
+  { w:516, h:774, f1:'pair3-1 (more attractive).png', f2:'pair3-2.png',                   correct:1 },
+  { w:706, h:952, f1:'pair4-1.png',                   f2:'pair4-2 (more attractive).png', correct:2 },
+  { w:240, h:227, f1:'pair5-1 (more attractive).png', f2:'pair5-2.png',                   correct:1 },
+  { w:456, h:494, f1:'pair6-1.png',                   f2:'pair6-2 (more attractive).png', correct:2 },
+  { w:227, h:226, f1:'pair7-1 (more attractive).png', f2:'pair7-2.png',                   correct:1 },
+];
+const DURATIONS = [1000, 750, 500, 250, 150, 100, 60];
+const MASK_MS = 1000;
+const MASK_SRC = 'img/' + encodeURIComponent('static.jpg');
+const url = (f) => 'img/' + encodeURIComponent(f);
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ---------- State ----------
+let current = 0, selected = null, order = [];
+const results = [];
+const $ = (id) => document.getElementById(id);
+
+function startGame() {
+  current = 0; selected = null; results.length = 0;
+  order = shuffle(PAIRS);
+  playRound();
+}
+
+const screens = {
+  start: $('screen-start'), play: $('screen-play'), question: $('screen-question'),
+  reveal: $('screen-reveal'), results: $('screen-results'),
+};
+function showScreen(name) {
+  Object.values(screens).forEach(s => s.classList.remove('active'));
+  screens[name].classList.add('active');
+}
+
+// ---------- Preload ----------
+const preloaded = [];
+function preloadAll() {
+  const files = [MASK_SRC];
+  PAIRS.forEach(p => { files.push(url(p.f1)); files.push(url(p.f2)); });
+  let loaded = 0;
+  const fill = $('load-fill'), pct = $('load-pct');
+  return Promise.all(files.map(src => new Promise(res => {
+    const img = new Image();
+    const done = () => {
+      loaded++;
+      const percent = Math.round(loaded / files.length * 100);
+      fill.style.width = percent + '%';
+      if (pct) pct.textContent = percent + '%';
+      res();
+    };
+    img.onload = done; img.onerror = done;
+    img.src = src;
+    preloaded.push(img);
+  })));
+}
+
+function preciseDelay(ms) {
+  return new Promise(res => {
+    const start = performance.now();
+    (function tick(now) {
+      if (now - start >= ms) res();
+      else requestAnimationFrame(tick);
+    })(performance.now());
+  });
+}
+
+// Size the stage to fit the pair INSIDE the available frame space (never overflow).
+function sizeStage(p) {
+  const area = $('stage-area');
+  const availW = area.clientWidth;
+  const availH = area.clientHeight;
+  if (!availW || !availH) return;
+  const scale = Math.min(availW / p.w, availH / p.h);
+  const stage = $('stage');
+  stage.style.width = Math.floor(p.w * scale) + 'px';
+  stage.style.height = Math.floor(p.h * scale) + 'px';
+}
+
+// ---------- Play sequence ----------
+async function playRound() {
+  showScreen('play');
+  const p = order[current];
+  const ms = DURATIONS[current];
+  $('play-label').textContent = `Round ${current + 1} of ${order.length}`;
+  $('q-label').textContent = `Round ${current + 1} of ${order.length}`;
+  $('play-progress').style.width = (current / order.length * 100) + '%';
+  $('speed-badge').textContent = `Face time: ${(ms / 1000).toFixed(2)}s`;
+  sizeStage(p);
+
+  const face1El = $('face-1'), face2El = $('face-2'), maskEl = $('mask-img'), cdEl = $('countdown');
+  face1El.classList.remove('show'); face2El.classList.remove('show'); maskEl.classList.remove('show');
+
+  // Set + decode both faces and the mask up front so no src-swap happens mid-flash.
+  face1El.src = url(p.f1); face2El.src = url(p.f2); maskEl.src = MASK_SRC;
+  await Promise.all([face1El, face2El, maskEl].map(img =>
+    img.decode ? img.decode().catch(() => {}) : Promise.resolve()
+  ));
+
+  // Countdown
+  cdEl.style.display = 'flex';
+  cdEl.style.alignItems = 'center';
+  cdEl.style.justifyContent = 'center';
+  cdEl.style.width = '100%'; cdEl.style.height = '100%';
+  for (const n of ['3', '2', '1']) {
+    cdEl.textContent = n;
+    cdEl.classList.remove('pulse'); void cdEl.offsetWidth; cdEl.classList.add('pulse');
+    await preciseDelay(700);
+  }
+  cdEl.style.display = 'none';
+
+  // Face 1 → mask → Face 2 → mask (pure visibility toggles)
+  face1El.classList.add('show'); await preciseDelay(ms); face1El.classList.remove('show');
+  maskEl.classList.add('show');  await preciseDelay(MASK_MS); maskEl.classList.remove('show');
+  face2El.classList.add('show'); await preciseDelay(ms); face2El.classList.remove('show');
+  maskEl.classList.add('show');  await preciseDelay(MASK_MS); maskEl.classList.remove('show');
+
+  askQuestion();
+}
+
+// ---------- Question ----------
+function askQuestion() {
+  selected = null;
+  document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+  $('submit-btn').disabled = true;
+  showScreen('question');
+}
+document.querySelectorAll('.choice-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selected = parseInt(btn.dataset.choice, 10);
+    document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    $('submit-btn').disabled = false;
+  });
+});
+$('submit-btn').addEventListener('click', () => { if (selected) reveal(); });
+
+// ---------- Reveal ----------
+function reveal() {
+  const p = order[current];
+  const ms = DURATIONS[current];
+  const correct = selected === p.correct;
+  results.push({ round: current + 1, ms, pick: selected, correct: p.correct, right: correct });
+
+  $('reveal-img-1').src = url(p.f1);
+  $('reveal-img-2').src = url(p.f2);
+
+  const c1 = $('reveal-1'), c2 = $('reveal-2');
+  c1.classList.remove('correct'); c2.classList.remove('correct');
+  c1.querySelector('.crown')?.remove();
+  c2.querySelector('.crown')?.remove();
+  const winCard = p.correct === 1 ? c1 : c2;
+  winCard.classList.add('correct');
+  const crown = document.createElement('div');
+  crown.className = 'crown';
+  crown.textContent = '👑';
+  winCard.appendChild(crown);
+
+  const v = $('verdict-text');
+  if (correct) {
+    v.textContent = '🎉 Correct!';
+    v.className = 'verdict win';
+    $('reveal-detail').textContent = `Face ${p.correct} was rated more attractive — nice call at ${(ms/1000).toFixed(2)}s!`;
+    burstConfetti();
+  } else {
+    v.textContent = '❌ Not quite';
+    v.className = 'verdict lose';
+    $('reveal-detail').textContent = `You picked Face ${selected}, but Face ${p.correct} was rated more attractive.`;
+  }
+  $('next-btn').textContent = current + 1 < order.length ? 'Next Round →' : 'See Results 🏁';
+  showScreen('reveal');
+}
+$('next-btn').addEventListener('click', () => {
+  current++;
+  if (current < order.length) playRound();
+  else showResults();
+});
+
+// ---------- Results ----------
+function showResults() {
+  const score = results.filter(r => r.right).length;
+  $('final-score').textContent = `${score} / ${order.length}`;
+  const msgs = {
+    7: "Perfect score! You've got an eye for it. 👁️✨",
+    6: "Incredible — almost flawless!",
+    5: "Great instincts under pressure!",
+    4: "Solid — better than a coin flip!",
+    3: "Not bad for split-second decisions!",
+    2: "Those faces flew by fast, didn't they?",
+    1: "Speed got the better of you this time!",
+    0: "Snap judgments are hard! Try again?",
+  };
+  $('score-message').textContent = msgs[score] || '';
+  const pips = $('pips');
+  pips.innerHTML = '';
+  results.forEach(r => {
+    const d = document.createElement('div');
+    d.className = 'pip ' + (r.right ? 'yes' : 'no');
+    d.innerHTML = `<span class="r">R${r.round}</span><span class="mark">${r.right ? '✓' : '✗'}</span><span class="m">${(r.ms/1000).toFixed(2)}s</span>`;
+    pips.appendChild(d);
+  });
+  showScreen('results');
+  if (score >= 5) setTimeout(burstConfetti, 300);
+  if (score === 7) setTimeout(burstConfetti, 800);
+}
+$('replay-btn').addEventListener('click', startGame);
+$('start-btn').addEventListener('click', startGame);
+
+// ---------- Confetti (scoped to the frame, lasts exactly 1s) ----------
+const canvas = $('confetti-canvas');
+const ctx = canvas.getContext('2d');
+let confetti = [], confettiRunning = false;
+function resizeCanvas() {
+  const f = $('frame');
+  canvas.width = f.clientWidth; canvas.height = f.clientHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); });
+
+const CONFETTI_MS = 1000;
+function burstConfetti() {
+  const colors = ['#ff4d8d', '#7b5cff', '#2ecc71', '#ffd54f', '#4dd0e1', '#ff8a65'];
+  const born = performance.now();
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const s = Math.max(0.5, Math.min(canvas.width, canvas.height) / 400); // scale burst to frame
+  for (let i = 0; i < 140; i++) {
+    confetti.push({
+      x: cx + (Math.random() - 0.5) * 120 * s,
+      y: cy,
+      vx: (Math.random() - 0.5) * 14 * s,
+      vy: (Math.random() * -14 - 4) * s,
+      size: (Math.random() * 7 + 3) * s,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * 360,
+      vrot: (Math.random() - 0.5) * 20,
+      born,
+    });
+  }
+  if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(animateConfetti); }
+}
+function animateConfetti(now) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const gravity = 0.35 * Math.max(0.5, Math.min(canvas.width, canvas.height) / 400);
+  confetti.forEach(p => {
+    p.vy += gravity; p.vx *= 0.99;
+    p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
+    p.life = 1 - (now - p.born) / CONFETTI_MS;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI / 180);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+    ctx.restore();
+  });
+  confetti = confetti.filter(p => now - p.born < CONFETTI_MS);
+  if (confetti.length > 0) requestAnimationFrame(animateConfetti);
+  else { confettiRunning = false; ctx.clearRect(0, 0, canvas.width, canvas.height); }
+}
+
+// Re-fit the current pair if the frame is resized mid-play.
+window.addEventListener('resize', () => {
+  if (screens.play.classList.contains('active')) {
+    const p = order[current]; if (p) sizeStage(p);
+  }
+});
+
+// ---------- Init ----------
+preloadAll().then(() => {
+  $('loading-text').textContent = 'Ready to test your instincts?';
+  $('load-fill').style.width = '100%';
+  const btn = $('start-btn');
+  btn.disabled = false;
+  btn.textContent = 'Start the Test ▶';
+});
+</script>
+</body>
+</html>
