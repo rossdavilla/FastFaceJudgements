@@ -171,6 +171,34 @@
   .pip.no .mark { color: var(--bad); }
 
   .loading-bar-wrap { width: min(70%, 420px); }
+
+  /* ---- First & last slides: big text, auto-fit to the frame ----
+     Content is laid out at a fixed "design" width with generous fixed
+     font sizes, then a JS transform scales the whole block to fill the
+     available frame (up to 96%). It grows on your 720x455 image for easy
+     phone reading, and shrinks to fit smaller frames without clipping. */
+  .fit {
+    width: 660px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 20px; transform-origin: center center;
+  }
+
+  #screen-start .fit h1 { font-size: 46px; }
+  #screen-start .fit .lead { font-size: 23px; line-height: 1.45; }
+  #screen-start .fit .info-card { padding: 22px 30px; max-width: 100%; }
+  #screen-start .fit .info-card ol { font-size: 22px; line-height: 1.6; margin-left: 26px; }
+  #screen-start .fit .btn { font-size: 25px; padding: 15px 46px; }
+
+  #screen-results .fit h1 { font-size: 40px; }
+  #screen-results .fit .big-score { font-size: 92px; }
+  #screen-results .fit .lead { font-size: 25px; line-height: 1.4; }
+  #screen-results .fit .btn { font-size: 25px; padding: 15px 46px; }
+  #screen-results .fit .pips { gap: 12px; }
+  #screen-results .fit .pip { min-width: 76px; padding: 10px 14px; gap: 5px; }
+  #screen-results .fit .pip .r { font-size: 16px; }
+  #screen-results .fit .pip .m { font-size: 15px; }
+  #screen-results .fit .pip .mark { font-size: 30px; }
 </style>
 </head>
 <body>
@@ -179,18 +207,20 @@
 
 <!-- START -->
 <section id="screen-start" class="screen active">
-  <h1>⚡ Snap Judgment</h1>
-  <p class="lead">How fast can your brain decide who's more attractive?</p>
-  <div class="info-card">
-    <ol>
-      <li><strong>Face&nbsp;1</strong> → static → <strong>Face&nbsp;2</strong> → static, then you pick the <strong>more attractive</strong> one.</li>
-      <li>Each round flashes <strong>faster</strong> — from 1&nbsp;second down to <strong>0.06&nbsp;seconds</strong>.</li>
-      <li>Guess right for a little 🎉.</li>
-    </ol>
+  <div class="fit">
+    <h1>⚡ Snap Judgment</h1>
+    <p class="lead">How fast can your brain decide who's more attractive?</p>
+    <div class="info-card">
+      <ol>
+        <li><strong>Face&nbsp;1</strong> → static → <strong>Face&nbsp;2</strong> → static, then you pick the <strong>more attractive</strong> one.</li>
+        <li>Each round flashes <strong>faster</strong> — from 1&nbsp;second down to <strong>0.06&nbsp;seconds</strong>.</li>
+        <li>Guess right for a little 🎉.</li>
+      </ol>
+    </div>
+    <p class="lead" id="loading-text">Loading all images… <span id="load-pct" style="color:var(--accent);font-weight:800;">0%</span></p>
+    <div class="loading-bar-wrap"><div class="progress-bar"><div class="progress-fill" id="load-fill"></div></div></div>
+    <button class="btn" id="start-btn" disabled>Preparing…</button>
   </div>
-  <p class="lead" id="loading-text">Loading all images… <span id="load-pct" style="color:var(--accent);font-weight:800;">0%</span></p>
-  <div class="loading-bar-wrap"><div class="progress-bar"><div class="progress-fill" id="load-fill"></div></div></div>
-  <button class="btn" id="start-btn" disabled>Preparing…</button>
 </section>
 
 <!-- PLAY -->
@@ -236,11 +266,13 @@
 
 <!-- RESULTS -->
 <section id="screen-results" class="screen">
-  <h1>🏁 Results</h1>
-  <div class="big-score" id="final-score">0 / 7</div>
-  <p class="lead" id="score-message"></p>
-  <div class="pips" id="pips"></div>
-  <button class="btn" id="replay-btn">Play Again 🔁</button>
+  <div class="fit">
+    <h1>🏁 Results</h1>
+    <div class="big-score" id="final-score">0 / 7</div>
+    <p class="lead" id="score-message"></p>
+    <div class="pips" id="pips"></div>
+    <button class="btn" id="replay-btn">Play Again 🔁</button>
+  </div>
 </section>
 
 </div>
@@ -288,6 +320,20 @@ const screens = {
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.remove('active'));
   screens[name].classList.add('active');
+  if (name === 'start' || name === 'results') requestAnimationFrame(() => fitScreen(screens[name]));
+}
+
+// Scale a .fit block to fill up to 96% of its frame (grow big, or shrink to fit).
+function fitScreen(scr) {
+  const fit = scr.querySelector('.fit');
+  if (!fit) return;
+  fit.style.transform = 'none';
+  const availW = scr.clientWidth * 0.96;
+  const availH = scr.clientHeight * 0.96;
+  const w = fit.scrollWidth, h = fit.scrollHeight;
+  if (!w || !h) return;
+  const scale = Math.min(availW / w, availH / h);
+  fit.style.transform = `scale(${scale})`;
 }
 
 // ---------- Preload ----------
@@ -514,20 +560,24 @@ function animateConfetti(now) {
   else { confettiRunning = false; ctx.clearRect(0, 0, canvas.width, canvas.height); }
 }
 
-// Re-fit the current pair if the frame is resized mid-play.
+// Re-fit content if the frame is resized.
 window.addEventListener('resize', () => {
   if (screens.play.classList.contains('active')) {
     const p = order[current]; if (p) sizeStage(p);
   }
+  if (screens.start.classList.contains('active')) fitScreen(screens.start);
+  if (screens.results.classList.contains('active')) fitScreen(screens.results);
 });
 
 // ---------- Init ----------
+fitScreen(screens.start);   // fit the loading screen right away
 preloadAll().then(() => {
   $('loading-text').textContent = 'Ready to test your instincts?';
   $('load-fill').style.width = '100%';
   const btn = $('start-btn');
   btn.disabled = false;
   btn.textContent = 'Start the Test ▶';
+  fitScreen(screens.start);  // re-fit now that the button/label text changed
 });
 </script>
 </body>
